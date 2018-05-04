@@ -29,7 +29,7 @@ public class AppDemo {
         System.err.println("单线程下载耗时：" + (System.currentTimeMillis() - startTime) + "ms");
 
         long startTime1 = System.currentTimeMillis();
-        MultiGrowingDownloadApi multiApi = new MultiGrowingDownloadApi(configUri, 10, 5000);
+        MultiGrowingDownloadApi multiApi = new MultiGrowingDownloadApi(configUri, 10);
         downDatesCallBack(multiApi, new DownCallback() {
             @Override
             public void handel(String filePath) {

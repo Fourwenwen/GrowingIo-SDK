@@ -23,18 +23,16 @@ public class MultiGrowingDownloadApi extends DownloadApi {
     private final boolean uncompress;
 
     private ExecutorService pool;
-    private int timeOut;
 
     public MultiGrowingDownloadApi() {
-        this("growingApi", 3, 5000);
+        this("growingApi", 3);
     }
 
-    public MultiGrowingDownloadApi(String configName, int threadNum, int timeout) {
+    public MultiGrowingDownloadApi(String configName, int threadNum) {
         super(configName);
         baseStorePath = config.baseStorePath();
         uncompress = config.uncompress();
         pool = Executors.newFixedThreadPool(threadNum);
-        this.timeOut = timeout;
     }
 
     /**
