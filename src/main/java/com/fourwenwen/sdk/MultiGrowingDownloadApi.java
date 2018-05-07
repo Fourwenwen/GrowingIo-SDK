@@ -116,13 +116,19 @@ public class MultiGrowingDownloadApi extends DownloadApi {
         @Override
         public void run() {
             boolean success = false;
+            int i = 0;
             while (true) {
                 success = download();
                 if (success) {
-                    System.out.println("* Downloaded url " + url);
+                    logger.info("* Downloaded url " + url);
                     break;
                 } else {
-                    System.out.println("Retry to download url " + url);
+                    i++;
+                    logger.error("Retry to download url " + url);
+                }
+                if (i > 10) {
+                    logger.error("Retry more than 10 times,not try " + url);
+                    break;
                 }
             }
             if (callback != null) {
@@ -158,6 +164,10 @@ public class MultiGrowingDownloadApi extends DownloadApi {
 
             return true;
         }
+    }
+
+    public void close() {
+        pool.shutdown();
     }
 
 }

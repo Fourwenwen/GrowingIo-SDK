@@ -18,43 +18,50 @@ public class AppDemo {
     private final static String configUri = "classPath*:growingApi.conf";
 
     public static void main(String[] args) throws Exception {
-        /*for (String date : dates) {
-            GrowingDownloadApi api = new GrowingDownloadApi();
-            api.download(date, "ads_track_activation");
-            api.download(date, "page");
-        }*/
-        long startTime = System.currentTimeMillis();
         GrowingDownloadApi api = new GrowingDownloadApi(configUri);
+        // api1 原sdk版功能
+        for (String date : dates) {
+            api.download(date);
+        }
+        // api2 单线程版本
+        long startTime = System.currentTimeMillis();
         downDates(api);
         System.err.println("单线程下载耗时：" + (System.currentTimeMillis() - startTime) + "ms");
-
-        long startTime1 = System.currentTimeMillis();
-        MultiGrowingDownloadApi multiApi = new MultiGrowingDownloadApi(configUri, 10);
-        downDatesCallBack(multiApi, new DownCallback() {
-            @Override
-            public void handel(String filePath) {
-                CsvReader csvReader = null;
-                try {
-                    // 创建CSV读对象
-                    csvReader = new CsvReader(filePath);
-                    // 读表头
-                    csvReader.readHeaders();
-                    Calendar now = Calendar.getInstance();
-                    while (csvReader.readRecord()) {
-                        // 读一整行
-                        System.out.print(1);
-                    }
-                    System.out.println("解析完一个");
-                } catch (IOException e) {
-                    e.printStackTrace();
-                } finally {
-                    if (csvReader != null) {
-                        csvReader.close();
+        // api2 多线程版
+        MultiGrowingDownloadApi multiApi = null;
+        try {
+            long startTime1 = System.currentTimeMillis();
+            multiApi = new MultiGrowingDownloadApi(configUri, 10);
+            downDatesCallBack(multiApi, new DownCallback() {
+                @Override
+                public void handel(String filePath) {
+                    CsvReader csvReader = null;
+                    try {
+                        // 创建CSV读对象
+                        csvReader = new CsvReader(filePath);
+                        // 读表头
+                        csvReader.readHeaders();
+                        Calendar now = Calendar.getInstance();
+                        while (csvReader.readRecord()) {
+                            // 读一整行
+                            System.out.print(1);
+                        }
+                        System.out.println("解析完一个");
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    } finally {
+                        if (csvReader != null) {
+                            csvReader.close();
+                        }
                     }
                 }
+            });
+            System.err.println("多线程下载耗时：" + (System.currentTimeMillis() - startTime1) + "ms");
+        } finally {
+            if (multiApi != null) {
+                multiApi.close();
             }
-        });
-        System.err.println("多线程下载耗时：" + (System.currentTimeMillis() - startTime1) + "ms");
+        }
     }
 
     private static void downDates(DownloadApi api) {
