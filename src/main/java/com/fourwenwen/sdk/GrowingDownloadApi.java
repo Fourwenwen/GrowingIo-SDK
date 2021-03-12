@@ -92,28 +92,4 @@ public class GrowingDownloadApi extends DownloadApi {
         return store(links);
     }
 
-    /**
-     * extract download link type(visit, page, action, etc), date and filename(part-xxxxx.gz)
-     * it is a hard coding function, maybe changed
-     *
-     * @param link the insights download link
-     * @return array with three elements: [type, date, filename]
-     */
-    public String[] splitLink(String link) {
-        String path = link.split("\\?")[0];
-        // 跳过https://growing-insights.s3.cn-north-1.amazonaws.com.cn/37bd_xxx
-        int first = path.indexOf('_', 64);
-        String info = path.substring(first + 1);
-
-        String[] parts = info.split("/");
-        if (parts.length != 2) {
-            logger.error("wrong download link: " + link);
-        }
-        String filename = parts[1];
-        int pos = parts[0].lastIndexOf("_");
-        String tp = parts[0].substring(0, pos);
-        String date = parts[0].substring(pos + 1);
-        return new String[]{tp, date, filename};
-    }
-
 }

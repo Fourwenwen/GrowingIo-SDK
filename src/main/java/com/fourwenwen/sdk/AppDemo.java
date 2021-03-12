@@ -11,7 +11,8 @@ import java.util.Calendar;
  */
 public class AppDemo {
 
-    private static String[] dates = new String[]{"20180416", "20180417", "20180418", "20180419", "20180420"};
+    private static String[] dates = new String[]{"20181112","20181112"};
+    // private static String[] dates = new String[]{"20180708"};
     private static String[] times = new String[]{"2018041616", "2018041617", "2018041618", "2018041619", "2018041620"};
     private static String[] apiName = new String[]{"visit", "action", "ads_track_activation", "page", "action_tag", "custom_event", "ads_track_click", "pvar", "evar"};
 
@@ -20,14 +21,14 @@ public class AppDemo {
     public static void main(String[] args) throws Exception {
         GrowingDownloadApi api = new GrowingDownloadApi(configUri);
         // api1 原sdk版功能
-        for (String date : dates) {
+        /*for (String date : dates) {
             api.download(date);
-        }
+        }*/
         // api2 单线程版本
         long startTime = System.currentTimeMillis();
         downDates(api);
         System.err.println("单线程下载耗时：" + (System.currentTimeMillis() - startTime) + "ms");
-        // api2 多线程版
+        /*// api2 多线程版
         MultiGrowingDownloadApi multiApi = null;
         try {
             long startTime1 = System.currentTimeMillis();
@@ -61,14 +62,17 @@ public class AppDemo {
             if (multiApi != null) {
                 multiApi.close();
             }
-        }
+        }*/
     }
 
     private static void downDates(DownloadApi api) {
         for (String time : dates) {
             for (String o : apiName) {
                 String[] filePaths = api.download(time, o);
-                if ("ads_track_activation".equals(o) || "page".equals(o)) {
+                for(String filePath:filePaths){
+                    System.out.println(filePath);
+                }
+                /*if ("ads_track_activation".equals(o) || "page".equals(o)) {
                     for (String filePath : filePaths) {
                         CsvReader csvReader = null;
                         try {
@@ -90,7 +94,7 @@ public class AppDemo {
                             }
                         }
                     }
-                }
+                }*/
             }
         }
     }

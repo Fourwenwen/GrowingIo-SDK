@@ -35,7 +35,7 @@ public abstract class DownloadApi implements StoreApi {
     private static final Logger logger = LoggerFactory.getLogger(DownloadApi.class);
 
     private static final String BASE_ENDPOINT = "https://www.growingio.com";
-    private static HttpClient httpClient = HttpClients.createDefault();
+    // private static HttpClient httpClient = HttpClients.createDefault();
     private static ObjectMapper objectMapper = new ObjectMapper();
 
     protected final GrowingConfig config;
@@ -50,7 +50,7 @@ public abstract class DownloadApi implements StoreApi {
             String auth = authToken(config.getSecretKey(), config.getProjectId(), config.getAi(), tm);
             return sendAuthPost(auth, tm);
         } catch (Exception e) {
-            logger.error("can not authorize the identity");
+            logger.error("can not authorize the identity", e);
         }
         return null;
     }
@@ -69,6 +69,10 @@ public abstract class DownloadApi implements StoreApi {
         return download(date, dataType, 5, null);
     }
 
+    public String[] download(String date, String dataType,int expire) {
+        return download(date, dataType, 5, null);
+    }
+
     public String[] download(String date, String dataType, DownCallback callback) {
         return download(date, dataType, 5, callback);
     }
@@ -80,6 +84,7 @@ public abstract class DownloadApi implements StoreApi {
     public String[] download(String date, String dataType, int expire, DownCallback callback) {
         String authorized = authorize();
         if (authorized != null) {
+            logger.info("Authorize success");
             return download(authorized, dataType, date, expire, callback);
         } else {
             logger.error("Authorize Failed");
@@ -96,14 +101,14 @@ public abstract class DownloadApi implements StoreApi {
             // api 2.0
             links = sendV2InsightsGet(authorized, dataType, date, expire);
         }
-        if (links != null) {
+        if (links != null && links.length > 0) {
             for (int i = 0; i < links.length; i++) {
                 logger.info("download links: " + links[i]);
             }
             try {
                 return store(links, callback);
             } catch (Exception e) {
-                e.printStackTrace();
+                logger.error("download links error", e);
             }
         } else {
             logger.error("failed to download, links is null");
@@ -116,8 +121,10 @@ public abstract class DownloadApi implements StoreApi {
      *
      * @param links 下载链接数组
      */
+    @Override
     public abstract String[] store(String[] links);
 
+    @Override
     public abstract String[] store(String[] links, DownCallback downCallback);
 
 
@@ -250,6 +257,7 @@ public abstract class DownloadApi implements StoreApi {
     public HttpResponse post(String url, Map<String, String> headers, Map<String, String> params, Charset charset) throws IOException {
         HttpResponse response = null;
         try {
+            HttpClient httpClient = HttpClients.createDefault();
             HttpPost httpPost = new HttpPost(url);
             setHeaders(httpPost, headers);
 
@@ -265,13 +273,13 @@ public abstract class DownloadApi implements StoreApi {
     public HttpResponse get(String url, Map<String, String> headers, Map<String, String> params, Charset charset) throws IOException {
         HttpResponse response = null;
         try {
+            HttpClient httpClient = HttpClients.createDefault();
             if (params != null && !params.isEmpty()) {
                 String query = EntityUtils.toString(buildEntity(params, charset));
                 url = url + "?" + query;
             }
             HttpGet httpGet = new HttpGet(url);
             setHeaders(httpGet, headers);
-
             response = httpClient.execute(httpGet);
         } catch (IOException e) {
             throw new IOException("error when post the request: " + url + ", params: " + params);
@@ -304,4 +312,31 @@ public abstract class DownloadApi implements StoreApi {
         return null;
     }
 
+    public GrowingConfig getConfig() {
+        return config;
+    }
+
+    /**
+     * extract download link type(visit, page, action, etc), date and filename(part-xxxxx.gz)
+     * it is a hard coding function, maybe changed
+     *
+     * @param link the insights download link
+     * @return array with three elements: [type, date, filename]
+     */
+    public String[] splitLink(String link) {
+        String path = link.split("\\?")[0];
+        // 跳过https://growing-insights.s3.cn-north-1.amazonaws.com.cn/37bd_xxx
+        int first = path.indexOf('_', 63);
+        String info = path.substring(first + 1);
+
+        String[] parts = info.split("/");
+        if (parts.length != 2) {
+            logger.error("wrong download link: " + link);
+        }
+        String filename = parts[1];
+        int pos = parts[0].lastIndexOf("_");
+        String tp = parts[0].substring(0, pos);
+        String date = parts[0].substring(pos + 1);
+        return new String[]{tp, date, filename};
+    }
 }

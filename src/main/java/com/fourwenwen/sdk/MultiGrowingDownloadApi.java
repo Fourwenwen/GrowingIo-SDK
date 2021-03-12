@@ -1,5 +1,7 @@
 package com.fourwenwen.sdk;
 
+import com.google.common.util.concurrent.ListeningExecutorService;
+import com.google.common.util.concurrent.MoreExecutors;
 import org.apache.http.HttpResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -8,13 +10,13 @@ import java.io.*;
 import java.nio.charset.Charset;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.*;
 import java.util.zip.GZIPInputStream;
 
 /**
- * Created by king on 7/19/16.
- * 若是使用GrowingDownApi,则可以
+ * @Author: chaowen.zheng
+ * @Description:
+ * @Date: Create in 16:52 2018/4/24
  */
 public class MultiGrowingDownloadApi extends DownloadApi {
     private static final Logger logger = LoggerFactory.getLogger(MultiGrowingDownloadApi.class);
@@ -22,17 +24,28 @@ public class MultiGrowingDownloadApi extends DownloadApi {
     private final String baseStorePath;
     private final boolean uncompress;
 
-    private ExecutorService pool;
+    // private ExecutorService pool;
+    private ListeningExecutorService pool;
+
+    private ListeningExecutorService workPool;
+
+    private final int retriesNum = 3;
 
     public MultiGrowingDownloadApi() {
-        this("growingApi", 3);
+        this("growingApi", 10);
     }
 
     public MultiGrowingDownloadApi(String configName, int threadNum) {
         super(configName);
         baseStorePath = config.baseStorePath();
         uncompress = config.uncompress();
-        pool = Executors.newFixedThreadPool(threadNum);
+        // pool = Executors.newFixedThreadPool(threadNum);
+        pool = MoreExecutors
+                .listeningDecorator(new ThreadPoolExecutor(
+                        threadNum, 30, 60000L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(10000)));
+        workPool = MoreExecutors
+                .listeningDecorator(new ThreadPoolExecutor(
+                        threadNum, 30, 60000L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(10000)));
     }
 
     /**
@@ -40,6 +53,7 @@ public class MultiGrowingDownloadApi extends DownloadApi {
      *
      * @param links 下载链接数组
      */
+    @Override
     public String[] store(String[] links) {
         return store(links, null);
     }
@@ -48,6 +62,7 @@ public class MultiGrowingDownloadApi extends DownloadApi {
     public String[] store(String[] links, DownCallback downCallback) {
         String[] downFiles = new String[links.length];
         for (int i = 0; i < links.length; i++) {
+            long startTime = System.currentTimeMillis();
             String[] linkParts = splitLink(links[i]);
             String filename = linkParts[2];
             if (uncompress) {
@@ -68,36 +83,14 @@ public class MultiGrowingDownloadApi extends DownloadApi {
             if (!dir.exists()) {
                 dir.mkdirs();
             }
+            String filePath = storePath + File.separator + filename;
 
-            pool.execute(new DownloadThread(links[i], storePath + File.separator + filename, downCallback));
+            pool.execute(new DownloadThread(links[i], filePath, downCallback));
+            downFiles[i] = filePath;
 
-            logger.info("Successfully download the file: " + storePath + File.separator + filename);
+            logger.info("Successfully download the file: {},take up time:{}ms", filePath, (System.currentTimeMillis() - startTime));
         }
         return downFiles;
-    }
-
-    /**
-     * extract download link type(visit, page, action, etc), date and filename(part-xxxxx.gz)
-     * it is a hard coding function, maybe changed
-     *
-     * @param link the insights download link
-     * @return array with three elements: [type, date, filename]
-     */
-    public String[] splitLink(String link) {
-        String path = link.split("\\?")[0];
-        // 跳过https://growing-insights.s3.cn-north-1.amazonaws.com.cn/37bd_xxx
-        int first = path.indexOf('_', 64);
-        String info = path.substring(first + 1);
-
-        String[] parts = info.split("/");
-        if (parts.length != 2) {
-            logger.error("wrong download link: " + link);
-        }
-        String filename = parts[1];
-        int pos = parts[0].lastIndexOf("_");
-        String tp = parts[0].substring(0, pos);
-        String date = parts[0].substring(pos + 1);
-        return new String[]{tp, date, filename};
     }
 
     //一个下载线程负责下载一个文件，如果失败则自动重试，直到下载完成
@@ -120,19 +113,22 @@ public class MultiGrowingDownloadApi extends DownloadApi {
             while (true) {
                 success = download();
                 if (success) {
-                    logger.info("* Downloaded url " + url);
+                    logger.info("Download url [{}] successfully, The local address is [{}]", url, filePath);
                     break;
                 } else {
                     i++;
                     logger.error("Retry to download url " + url);
                 }
-                if (i > 10) {
-                    logger.error("Retry more than 10 times,not try " + url);
+                if (i > retriesNum) {
+                    logger.error("Retry more than " + retriesNum + " times,not try " + url);
                     break;
                 }
             }
             if (callback != null) {
-                callback.handel(filePath);
+                workPool.execute(() ->
+                        callback.handel(filePath)
+                );
+
             }
         }
 
@@ -158,7 +154,7 @@ public class MultiGrowingDownloadApi extends DownloadApi {
                 bout.close();
                 bin.close();
             } catch (IOException e) {
-                System.err.println("Failed to store the download file: " + url);
+                logger.error("Failed to store the download file: " + url, e);
                 return false;
             }
 
@@ -168,6 +164,37 @@ public class MultiGrowingDownloadApi extends DownloadApi {
 
     public void close() {
         pool.shutdown();
+        workPool.shutdown();
     }
+
+    public void suibian (){
+        new DownloadThread("https://growing-insight.cn-bj.ufileos.com/7bcc_9b0d1f56d5baff1a_custom_event_v2_202011301100/part-00000-32c9fdd4-9091-4bb2-bcce-5f316894dd4b-c000.csv.gz?UCloudPublicKey=TOKEN_386140fd-1842-4520-9620-4f75a0b2ceb8&Signature=H5UZ9yVwOfAnECqlyW9Vs3bb0EE%3D&Expires=1608129150","F:\\mfs\\ShareFile\\upload\\hs\\GrowingIo\\custom_event_v2\\20201216\\suibian.zip",null).start();
+    }
+
+    public static void main(String[] args) {
+        /*MultiGrowingDownloadApi api = new MultiGrowingDownloadApi("F:\\gitproject\\hs-task\\src\\main\\resources\\hs-task-file\\growingApi.conf",10);
+        api.suibian();*/
+        String link = "https://growing-insight.cn-bj.ufileos.com/4b16_9b0d1f56d5baff1a_ads_track_activation_v2_202012160800/part-00000-4484f4eb-3ba7-4764-943f-7f48dfbfde62-c000.csv.gz?UCloudPublicKey=TOKEN_386140fd-1842-4520-9620-4f75a0b2ceb8&Signature=xDyUUn%2Fzv64MJ92QFAFFcjciP3o%3D&Expires=1608130838";
+        String path = link.split("\\?")[0];
+        // 跳过https://growing-insights.s3.cn-north-1.amazonaws.com.cn/37bd_xxx
+        int first = path.indexOf('_', 63);
+        String info = path.substring(first + 1);
+
+        String[] parts = info.split("/");
+        if (parts.length != 2) {
+            logger.error("wrong download link: " + link);
+        }
+        String filename = parts[1];
+        int pos = parts[0].lastIndexOf("_");
+        String tp = parts[0].substring(0, pos);
+        String date = parts[0].substring(pos + 1);
+        String[] strs = new String[]{tp, date, filename};
+        for (String one:strs){
+            System.out.println(one);
+        }
+
+    }
+
+
 
 }
